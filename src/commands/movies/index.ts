@@ -17,33 +17,38 @@ dotenv.config();
 type Movie = Movies;
 
 /**
- * Commands:
- * list movies
- *  - include notes from users
- * -
- *  - this will re-use code with list movies
- * remove a movie
- * edit a movie (can override attributes despite what IDMB reported)
- * mark a movie as watched or unwatched
- * TODO: Movie notes will be added later since I need to add support for associations between tables
- * add note (users can add notes to movie)
- * delete a note
- * edit a note
- * configure movie channel and movie role
- * start movie
- *  - create a thread in configured movie channel
- *  - create a message that mentions role
- *  - marks movie as watched
- * TODO:
- *  - Website should have movie ordering (therefore the model should include ordered preferences and favorites)
- * Differentiate between movies and TV shows on embed
- * Auto complete movie entries for user
- * TODO: Toon adds ChatGPT recommendations
- * TODO: Add a "start" button to the movie picker command response which lets you just start the movie without having to use the /movie start command
+ * TODOs for later:
+ * - Add notes
+ *  - Movies to Notes should be a one to many relationship in the database,
+ *    so table associations need to be added, which is the blocker for this.
+ *  - Listing movies should include user notes
+ *  - TODOs:
+ *    - add note
+ *    - list notes with movies embeds
+ *    - edit notes
+ *    - delete notes
+ * - Add lists
+ *   - Support custom movie (ordered) lists. Again, need database associations, so blocked on that.
+ *   - TODO: Come up with database schema for maintaining list order
  */
 
 /**
- * TODO: Make sure that we don't allow duplicate movies to be created
+ * TODOs:
+ * - Add "title" and "imdb_id" as list option
+ * - start movie
+ *  - create a thread in configured movie channel
+ *  - create a message that mentions role
+ *  - marks movie as watched
+ *  - add a "start" button to the movie picker command response
+ *    which lets you just start the movie without having
+ *    to use the /movie start command
+ * - ?? Auto complete movie entries for user
+ * - Toon adds ChatGPT recommendations
+ */
+
+/**
+ * Done and needs testing:
+ * - TODO
  */
 
 function getMovieEmbed(movie: Movie): EmbedBuilder {
@@ -82,19 +87,20 @@ function getMovieEmbed(movie: Movie): EmbedBuilder {
         inline: true,
       },
     ],
-    // footer: {
-    //   text: `[https://imdb.com/title/${movie.imdb_id}](https://imdb.com/title/${movie.imdb_id})`,
-    // },
+    footer: movie.imdb_id ? {
+      text: `IMDb ID: ${movie.imdb_id}`,
+    } : undefined,
   });
 }
 const commandBuilder = new SlashCommandBuilder();
 commandBuilder
   .setName('movies')
   .setDescription('Managing movie list');
+
 commandBuilder.addSubcommand(subcommand => {
   subcommand
     .setName('create')
-    .setDescription('Create a reminder or timer (timer is if there is no message).')
+    .setDescription('Create a movie.')
     .addStringOption(option => option
       .setName('title')
       .setDescription('Title of the movie')
@@ -106,6 +112,72 @@ commandBuilder.addSubcommand(subcommand => {
     .addBooleanOption(option => option
       .setName('favorite')
       .setDescription('Whether this is favorited')
+      .setRequired(false));
+  return subcommand;
+});
+
+commandBuilder.addSubcommand(subcommand => {
+  subcommand
+    .setName('edit')
+    .setDescription('Edit a movie.')
+    .addStringOption(option => option
+      .setName('imdb_id')
+      .setDescription('Part of the URL. Ex: tt8801880')
+      .setRequired(false))
+    .addStringOption(option => option
+      .setName('title')
+      .setDescription('Title of the movie')
+      .setRequired(false))
+    .addBooleanOption(option => option
+      .setName('favorite')
+      .setDescription('Whether this is favorited')
+      .setRequired(false))
+    .addBooleanOption(option => option
+      .setName('watched')
+      .setDescription('Whether this has been watched')
+      .setRequired(false))
+    .addStringOption(option => option
+      .setName('actors')
+      .setDescription('Actors (comma-separated)')
+      .setRequired(false))
+    .addStringOption(option => option
+      .setName('genre')
+      .setDescription('Genre (comma-separated)')
+      .setRequired(false))
+    .addNumberOption(option => option
+      .setName('year')
+      .setDescription('Year of release')
+      .setRequired(false))
+    .addNumberOption(option => option
+      .setName('imdb_rating')
+      .setDescription('IMDB rating (0-100)')
+      .setRequired(false))
+    .addNumberOption(option => option
+      .setName('metacritic_rating')
+      .setDescription('Metacritic rating (0-100)')
+      .setRequired(false))
+    .addNumberOption(option => option
+      .setName('rotten_tomatoes_rating')
+      .setDescription('Rotten Tomatoes rating (0-100)')
+      .setRequired(false))
+    .addStringOption(option => option
+      .setName('language')
+      .setDescription('Language')
+      .setRequired(false));
+  return subcommand;
+});
+
+commandBuilder.addSubcommand(subcommand => {
+  subcommand
+    .setName('delete')
+    .setDescription('Delete a movie.')
+    .addStringOption(option => option
+      .setName('title')
+      .setDescription('Title of the movie (must be exact)')
+      .setRequired(false))
+    .addStringOption(option => option
+      .setName('imdb_id')
+      .setDescription('Part of the URL. Ex: tt8801880')
       .setRequired(false));
   return subcommand;
 });
@@ -178,14 +250,28 @@ function getDeleteButton(): ActionRowBuilder<ButtonBuilder> {
   });
 }
 
-export async function handleUpsert(interaction: AnyInteraction): Promise<IntentionalAny> {
+// TODO: Separate create and edit. This is too coupled for no reason
+async function handleUpsert(
+  interaction: AnyInteraction,
+  subcommand: 'edit' | 'create',
+): Promise<IntentionalAny> {
+  const isEditing = subcommand === 'edit';
+
   const inputs = await parseInput({
     slashCommandData: commandBuilder,
     interaction,
   }) as {
-    imdb_id: string,
-    title: string,
-    favorite: boolean,
+    imdb_id?: string,
+    title?: string,
+    favorite?: boolean,
+    watched?: boolean
+    actors?: string,
+    genre?: string,
+    year?: number,
+    imdb_rating?: number,
+    metacritic_rating?: number,
+    rotten_tomatoes_rating?: number,
+    language?: string,
   };
 
   if (!inputs.imdb_id && !inputs.title) {
@@ -211,9 +297,10 @@ export async function handleUpsert(interaction: AnyInteraction): Promise<Intenti
     });
   }
 
-  if (movieApiKey) {
+  if (movieApiKey && !isEditing) {
     const url = new URL(MOVIE_DATABASE_API_ROOT);
     url.searchParams.append('apiKey', movieApiKey);
+    url.searchParams.append('type', 'movie');
     if (inputs.imdb_id) {
       url.searchParams.append('i', inputs.imdb_id);
     } else if (inputs.title) {
@@ -266,9 +353,39 @@ export async function handleUpsert(interaction: AnyInteraction): Promise<Intenti
     } catch (err) {
       error(err);
     }
-  }
-
-  if (inputs.title) {
+  } else if (isEditing) {
+    if (!inputs.title && !inputs.imdb_id) {
+      throw new Error('Must provide title or imdb_id to edit movie');
+    }
+    const query: Partial<Movie> = {
+      guild_id: interaction.guildId!,
+    };
+    if (inputs.title) query.title = inputs.title;
+    if (inputs.imdb_id) query.imdb_id = inputs.imdb_id;
+    const movie = await Movies.findOne({
+      where: query,
+    });
+    if (!movie) throw new Error('Movie not found');
+    const updateObject: Partial<Movie> = {
+      guild_id: interaction.guildId!,
+    };
+    // TODO: Fix this cringe
+    if (inputs.favorite != null) updateObject.is_favorite = inputs.favorite;
+    if (inputs.watched != null) updateObject.was_watched = inputs.watched;
+    if (inputs.actors != null) updateObject.actors = inputs.actors;
+    if (inputs.genre != null) updateObject.genre = inputs.genre;
+    if (inputs.year != null) updateObject.year = inputs.year;
+    if (inputs.imdb_rating != null) updateObject.imdb_rating = inputs.imdb_rating;
+    if (inputs.metacritic_rating != null) updateObject.metacritic_rating = inputs.metacritic_rating;
+    if (inputs.rotten_tomatoes_rating != null) updateObject.rotten_tomatoes_rating = inputs.rotten_tomatoes_rating;
+    if (inputs.language != null) updateObject.language = inputs.language;
+    await movie.update(updateObject);
+    const embed = getMovieEmbed(movie);
+    await interaction.editReply({
+      content: 'Movie updated',
+      embeds: [embed],
+    });
+  } else if (inputs.title) {
     // Upsert the movie
     const [movie] = await Movies.upsert({
       guild_id: interaction.guildId!,
@@ -351,7 +468,7 @@ function filterMovie(movie: Movie, inputs: FilterInputs): boolean {
   return isMatch;
 }
 
-export async function handleList(interaction: AnyInteraction): Promise<IntentionalAny> {
+async function handleList(interaction: AnyInteraction): Promise<IntentionalAny> {
   const inputs = await parseInput({
     slashCommandData: commandBuilder,
     interaction,
@@ -366,7 +483,7 @@ export async function handleList(interaction: AnyInteraction): Promise<Intention
   });
 }
 
-export async function handlePick(interaction: AnyInteraction): Promise<IntentionalAny> {
+async function handlePick(interaction: AnyInteraction): Promise<IntentionalAny> {
   const inputs = await parseInput({
     slashCommandData: commandBuilder,
     interaction,
@@ -383,6 +500,38 @@ export async function handlePick(interaction: AnyInteraction): Promise<Intention
   });
 }
 
+async function handleDelete(interaction: AnyInteraction): Promise<IntentionalAny> {
+  const inputs = await parseInput({
+    slashCommandData: commandBuilder,
+    interaction,
+  }) as {
+    title?: string,
+    imdb_id?: string,
+  };
+
+  const { title, imdb_id: imdbId } = inputs;
+
+  if (imdbId) {
+    await Movies.destroy({
+      where: {
+        guild_id: interaction.guildId!,
+        imdb_id: imdbId,
+      },
+    });
+  } else if (title) {
+    await Movies.destroy({
+      where: {
+        guild_id: interaction.guildId!,
+        title,
+      },
+    });
+  } else {
+    throw new Error('title or imdb_id is required');
+  }
+
+  await interaction.editReply('Movie deleted.');
+}
+
 const run: CommandOrModalRunMethod = async interaction => {
   await interaction.deferReply({ ephemeral: true });
 
@@ -397,13 +546,10 @@ const run: CommandOrModalRunMethod = async interaction => {
     }
     case 'edit':
     case 'create': {
-      return handleUpsert(interaction);
+      return handleUpsert(interaction, subcommand);
     }
     case 'delete': {
-      return null;
-      // You will call Movies.destroy({ where: { guild_id: interaction.guildId, title: '...' }});
-      // Googlable: "sequelize delete row"
-      // return handleDelete(interaction);
+      return handleDelete(interaction);
     }
     case 'pick': {
       return handlePick(interaction);

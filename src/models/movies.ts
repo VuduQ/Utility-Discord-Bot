@@ -2,6 +2,7 @@ import Sequelize, {
   Model,
   InferAttributes,
   InferCreationAttributes,
+  Op,
 } from 'sequelize';
 import type { ModelDefinition } from 'src/types';
 
@@ -24,6 +25,8 @@ export class Movies extends Model<
   declare rating: string | null;
   declare language: string | null;
 }
+
+const COMMA_SEPARATED_VALIDATION_REGEX = /^([^,]+,\s*)*[^,]+$/;
 
 const MoviesDefinition: ModelDefinition = sequelize => {
   const tableName = 'movies';
@@ -53,6 +56,9 @@ const MoviesDefinition: ModelDefinition = sequelize => {
     actors: {
       type: Sequelize.TEXT,
       allowNull: true,
+      validate: {
+        is: COMMA_SEPARATED_VALIDATION_REGEX,
+      },
     },
     director: {
       type: Sequelize.STRING,
@@ -61,6 +67,9 @@ const MoviesDefinition: ModelDefinition = sequelize => {
     genre: {
       type: Sequelize.TEXT,
       allowNull: true,
+      validate: {
+        is: COMMA_SEPARATED_VALIDATION_REGEX,
+      },
     },
     year: {
       type: Sequelize.INTEGER,
@@ -106,6 +115,17 @@ const MoviesDefinition: ModelDefinition = sequelize => {
     sequelize,
     tableName,
     freezeTableName: true,
+    indexes: [
+      {
+        unique: true,
+        fields: ['guild_id', 'imdb_id'],
+        where: {
+          imdb_id: {
+            [Op.ne]: null,
+          },
+        },
+      },
+    ],
   });
 };
 
