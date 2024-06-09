@@ -27,11 +27,21 @@ const sequelize = new Sequelize(process.env.DATABASE_URL!, sequelizeOpts);
 
 fs
   .readdirSync(__dirname)
-  .filter(file => file.endsWith('.ts') && file !== 'index.ts')
+  .filter(file => file.endsWith('.ts') && file !== 'index.ts' && file !== 'movie-notes.ts')
   .map(file => {
     // eslint-disable-next-line global-require, import/no-dynamic-require, @typescript-eslint/no-var-requires
-    return require(path.join(__dirname, file)).default(sequelize);
+    return require(path.join(__dirname, file));
+  })
+  .map(modelExports => {
+    modelExports.default(sequelize);
+    return modelExports;
   });
+// TODO: Add this code back once the on conflict stuff is figured out
+// .forEach(modelExports => {
+//   if (modelExports.associate) {
+//     modelExports.associate();
+//   }
+// });
 
 export function syncModels(): Promise<IntentionalAny> {
   // TODO: Add proper migrations instead of allowing the tables to be altered

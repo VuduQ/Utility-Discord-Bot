@@ -6,6 +6,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Message } from 'discord.j
 import { SlashCommandBuilder, EmbedBuilder, SlashCommandSubcommandBuilder } from '@discordjs/builders';
 
 import { Movies } from 'src/models/movies';
+import { MovieNotes } from 'src/models/movie-notes';
 import { MOVIE_DATABASE_API_ROOT } from 'src/constants';
 import { parseInput, getSubcommand, replyWithEmbeds } from 'src/discord-utils';
 import { log, error } from 'src/logging';
@@ -232,7 +233,8 @@ commandBuilder.addSubcommand(subcommand => {
   return applyFilterOptions(subcommand);
 });
 
-const movieApiKey = process.env.OMBD_API_KEY;
+// TODO: Uncomment
+const movieApiKey = ''; // process.env.OMBD_API_KEY;
 
 function isMovieApiSetUp(): boolean {
   return Boolean(movieApiKey);
@@ -406,6 +408,14 @@ async function handleUpsert(
     }, {
       returning: true,
     });
+
+    // TODO: Remove
+    // await movie.addMovieNote(new MovieNotes({
+    //   guild_id: interaction.guildId!,
+    //   author_id: interaction.user.id,
+    //   note: 'TODO',
+    // }));
+
     const embed = getMovieEmbed(movie);
     const message = await interaction.editReply({
       content: 'Movie created, but additional data could not be fetched for the title',
@@ -473,8 +483,15 @@ async function handleList(interaction: AnyInteraction): Promise<IntentionalAny> 
     slashCommandData: commandBuilder,
     interaction,
   }) as FilterInputs;
-  const movies = await Movies.findAll({});
+  const movies = await Movies.findAll({
+    // include: MovieNotes,
+  });
   const filteredMovies = movies.filter(movie => filterMovie(movie, inputs));
+
+  // TODO: Remove
+  // const notes = await filteredMovies[0]?.getMovieNotes();
+  // console.log('Notes', notes);
+
   const embeds = filteredMovies.map(movie => getMovieEmbed(movie));
   await replyWithEmbeds({
     interaction,
@@ -493,10 +510,38 @@ async function handlePick(interaction: AnyInteraction): Promise<IntentionalAny> 
   const filteredMovies = movies.filter(movie => filterMovie(movie, inputs));
   const pickedMovie = getRandomElement(filteredMovies);
   const movieEmbed = getMovieEmbed(pickedMovie);
-  await replyWithEmbeds({
-    interaction,
+  // TODO: Extract this button stuff to a utility function. Too much boilerplate
+  const message = await interaction.editReply({
     embeds: [movieEmbed],
-    ephemeral: true,
+    components: [
+      new ActionRowBuilder<ButtonBuilder>({
+        components: [
+          new ButtonBuilder({
+            customId: 'start',
+            label: 'Start',
+            style: ButtonStyle.Primary,
+          }),
+        ],
+      }),
+    ],
+  });
+  listenForButtons({
+    interaction,
+    message,
+    handlers: {
+      start: async () => {
+        // TODO: Create thread, mention roles and mark the movie as watched
+        console.log('TODO start', pickedMovie);
+      },
+    },
+    cleanupCb: async () => {
+      await interaction.editReply({
+        components: [],
+      });
+      await interaction.followUp({
+        content: 'La pelicula comenzo!',
+      });
+    },
   });
 }
 
@@ -533,7 +578,7 @@ async function handleDelete(interaction: AnyInteraction): Promise<IntentionalAny
 }
 
 const run: CommandOrModalRunMethod = async interaction => {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ ephemeral: false });
 
   if (!isMovieApiSetUp()) {
     log('OMDb API is not configured');

@@ -2,13 +2,28 @@ import Sequelize, {
   Model,
   InferAttributes,
   InferCreationAttributes,
+  CreationOptional,
   Op,
+  HasManyGetAssociationsMixin,
+  HasManyAddAssociationMixin,
+  HasManyRemoveAssociationsMixin,
+  NonAttribute,
 } from 'sequelize';
 import type { ModelDefinition } from 'src/types';
+// import { MovieNotes } from './movie-notes';
+
+// type MovieNotePrimaryKeyType = MovieNotes['id'];
 
 export class Movies extends Model<
   InferAttributes<Movies>, InferCreationAttributes<Movies>
 > {
+  // https://sequelize.org/docs/v6/other-topics/typescript/
+  // declare getMovieNotes: HasManyGetAssociationsMixin<MovieNotes>;
+  // declare addMovieNote: HasManyAddAssociationMixin<MovieNotes, MovieNotePrimaryKeyType>;
+  // declare removeMovieNote: HasManyRemoveAssociationsMixin<MovieNotes, MovieNotePrimaryKeyType>;
+  // declare notes?: NonAttribute<MovieNotes[]>;
+
+  declare id: CreationOptional<string>;
   declare guild_id: string;
   declare title: string;
   declare is_favorite: boolean;
@@ -31,14 +46,17 @@ const COMMA_SEPARATED_VALIDATION_REGEX = /^([^,]+,\s*)*[^,]+$/;
 const MoviesDefinition: ModelDefinition = sequelize => {
   const tableName = 'movies';
   Movies.init({
+    id: {
+      type: Sequelize.UUID,
+      defaultValue: Sequelize.UUIDV4,
+      primaryKey: true,
+    },
     guild_id: {
       type: Sequelize.STRING,
-      primaryKey: true,
       allowNull: false,
     },
     title: {
       type: Sequelize.STRING,
-      primaryKey: true,
       allowNull: false,
     },
     is_favorite: {
@@ -125,8 +143,21 @@ const MoviesDefinition: ModelDefinition = sequelize => {
           },
         },
       },
+      {
+        unique: true,
+        fields: ['guild_id', 'title'],
+      },
     ],
   });
 };
+
+// export function associate(): void {
+//   Movies.hasMany(MovieNotes, {
+//     as: 'movieNotes',
+//     foreignKey: {
+//       name: 'movie_id',
+//     },
+//   });
+// }
 
 export default MoviesDefinition;
